@@ -2,7 +2,7 @@
 
 Simple Bash scripts for backing up and restoring a local Hermes deployment using `rsync` over SSH.
 
-The purpose of these scripts is **disaster recovery**: preserving the Hermes state and deployment configuration so a system can be rebuilt after a hardware failure, operating system reinstall, or migration to another machine.
+The goal is **disaster recovery**: preserving the Hermes state and deployment configuration so a system can be rebuilt after hardware failure, OS reinstallation, or migration to a new machine.
 
 ---
 
@@ -10,22 +10,22 @@ The purpose of these scripts is **disaster recovery**: preserving the Hermes sta
 
 - Incremental backups using `rsync`
 - Timestamped snapshots
-- Automatic `latest` symlink
-- Restore the newest or any previous snapshot
-- Stores normal files and directories (no tar or zip archives)
-- SSH transport
-- Configuration separated from the scripts
-- Safe to publish in a public Git repository
+- `latest` symlink automatically updated after successful backups
+- Restore the latest snapshot or any previous snapshot
+- Stores normal files and directories (no archive files)
+- Uses SSH for transport
+- Configuration kept separate from the scripts
+- Safe for public repositories
 
 ---
 
 # Requirements
 
-The following software must be installed:
+The following programs must be available:
 
 - Bash
 - rsync
-- OpenSSH (ssh)
+- ssh
 - Docker
 - Docker Compose
 
@@ -40,13 +40,11 @@ The backup destination must be reachable over SSH.
 ├── backup-hermes.sh
 ├── restore-hermes.sh
 ├── backup.conf.example
-├── .env.example
 ├── .gitignore
-├── README.md
-└── docker-compose.two-container.yml
+└── README.md
 ```
 
-Your deployment directory will typically look like this:
+Your deployment directory will normally also contain:
 
 ```text
 .
@@ -62,7 +60,7 @@ Your deployment directory will typically look like this:
 
 # Configuration
 
-Create a local configuration file:
+Copy the example configuration:
 
 ```bash
 cp backup.conf.example backup.conf
@@ -72,8 +70,8 @@ chmod 600 backup.conf
 Edit `backup.conf`:
 
 ```bash
-REMOTE_HOST="BACKUP_HOST"
-REMOTE_ROOT="/PATH/TO/BACKUPS"
+REMOTE_HOST="<backup-host>"
+REMOTE_ROOT="<backup-root>"
 
 # Optional
 HERMES_HOME="${HOME}/.hermes"
@@ -83,19 +81,19 @@ COMPOSE_FILENAME="docker-compose.two-container.yml"
 ```
 
 | Variable | Description |
-|----------|-------------|
+|-----------|-------------|
 | `REMOTE_HOST` | SSH hostname or SSH alias |
-| `REMOTE_ROOT` | Remote directory used to store backups |
+| `REMOTE_ROOT` | Remote directory where backups are stored |
 | `HERMES_HOME` | Hermes persistent state directory |
-| `COMPOSE_FILENAME` | Docker Compose file to back up |
+| `COMPOSE_FILENAME` | Docker Compose file name |
 
-The scripts automatically locate the deployment directory based on their own location.
+The scripts automatically determine the deployment directory from their own location.
 
 ---
 
 # First-Time Setup
 
-Make the scripts executable:
+Make the scripts executable.
 
 ```bash
 chmod 700 backup-hermes.sh
@@ -109,7 +107,7 @@ bash -n backup-hermes.sh
 bash -n restore-hermes.sh
 ```
 
-If ShellCheck is available:
+If ShellCheck is installed:
 
 ```bash
 shellcheck backup-hermes.sh restore-hermes.sh
@@ -125,18 +123,18 @@ Run:
 ./backup-hermes.sh
 ```
 
-The backup includes:
+The script backs up:
 
 - `.env`
 - `docker-compose.two-container.yml`
-- Hermes persistent state (`HERMES_HOME`)
+- `${HERMES_HOME}`
 
 A timestamped snapshot is created on the remote host.
 
 Example:
 
 ```text
-/PATH/TO/BACKUPS/
+<backup-root>/
 ├── latest
 └── snapshots/
     ├── 2026-07-24_14-12-05/
@@ -161,7 +159,7 @@ BACKUP_COMPLETE
 
 # Restoring
 
-Restore the newest backup:
+Restore the latest backup:
 
 ```bash
 ./restore-hermes.sh
@@ -173,13 +171,13 @@ Restore a specific snapshot:
 ./restore-hermes.sh 2026-07-24_14-12-05
 ```
 
-The restore operation replaces:
+The script restores:
 
-- Hermes persistent state
+- Hermes state
 - `.env`
 - Docker Compose configuration
 
-The script asks for confirmation before overwriting any files.
+The restore requires confirmation before overwriting existing files.
 
 ---
 
@@ -199,7 +197,7 @@ docker compose \
 
 Before making major system changes:
 
-Stop Hermes:
+Stop the containers:
 
 ```bash
 docker compose \
@@ -227,16 +225,15 @@ docker compose \
 
 1. Install Docker.
 2. Install Docker Compose.
-3. Clone or download this repository.
-4. Create `backup.conf` from `backup.conf.example`.
-5. Configure the remote backup location.
-6. Run:
+3. Clone this repository.
+4. Create `backup.conf`.
+5. Run:
 
 ```bash
 ./restore-hermes.sh
 ```
 
-7. Start Hermes:
+6. Start Hermes:
 
 ```bash
 docker compose \
@@ -248,37 +245,37 @@ docker compose \
 
 # Inspecting Remote Backups
 
-List all snapshots:
+List snapshots:
 
 ```bash
-ssh BACKUP_HOST \
-    "find /PATH/TO/BACKUPS/snapshots -maxdepth 1 -type d | sort"
+ssh <backup-host> \
+    "find <backup-root>/snapshots -maxdepth 1 -type d | sort"
 ```
 
 Show the latest snapshot:
 
 ```bash
-ssh BACKUP_HOST \
-    "readlink -f /PATH/TO/BACKUPS/latest"
+ssh <backup-host> \
+    "readlink -f <backup-root>/latest"
 ```
 
-Display snapshot sizes:
+Show snapshot sizes:
 
 ```bash
-ssh BACKUP_HOST \
-    "du -sh /PATH/TO/BACKUPS/snapshots/*"
+ssh <backup-host> \
+    "du -sh <backup-root>/snapshots/*"
 ```
 
 ---
 
-# Preview a Backup
+# Testing Without Copying Data
 
-Preview what would be transferred without copying any files:
+Preview a backup:
 
 ```bash
 rsync -avzn \
     "${HOME}/.hermes/" \
-    BACKUP_HOST:/PATH/TO/BACKUPS/test/
+    <backup-host>:<backup-root>/test/
 ```
 
 Preview deployment files:
@@ -287,25 +284,25 @@ Preview deployment files:
 rsync -avzn \
     .env \
     docker-compose.two-container.yml \
-    BACKUP_HOST:/PATH/TO/BACKUPS/test/
+    <backup-host>:<backup-root>/test/
 ```
 
-The `-n` (`--dry-run`) option performs no writes.
+No files are transferred when using `-n`.
 
 ---
 
 # Security
 
-Never commit:
+The following files should **never** be committed:
 
 - `.env`
 - `backup.conf`
-- SSH private keys
+- SSH keys
 - API keys
 - Passwords
 - Tokens
 
-Recommended `.gitignore`:
+A recommended `.gitignore`:
 
 ```gitignore
 .env
@@ -323,9 +320,7 @@ snapshots/
 latest
 ```
 
-Before publishing changes, review them carefully.
-
-If using Git locally:
+Before committing, review staged changes:
 
 ```bash
 git diff --cached
@@ -335,11 +330,12 @@ git diff --cached
 
 # Notes
 
-- The scripts use `rsync` for file synchronization.
-- `-z` compresses data only during network transfer.
-- Backups are stored as regular files and directories.
-- Docker images and containers are intentionally **not** backed up.
-- Containers can be recreated from the Compose configuration after restoring the Hermes state.
+- The scripts use `rsync`.
+- `-z` compresses data **during transfer only**.
+- Backups are stored as regular files and directories rather than archive files.
+- Docker images and containers are **not** backed up.
+- Docker recreates containers from the Compose file.
+- The Hermes state is restored from the backed-up data.
 
 ---
 
