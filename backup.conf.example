@@ -1,0 +1,11 @@
+# Copy this file to backup.conf and replace the placeholder values.
+# Do not commit backup.conf.
+
+REMOTE_HOST="<backup-host>"
+REMOTE_ROOT="<absolute-remote-backup-path>"
+
+# Optional. Defaults to "${HOME}/.hermes".
+HERMES_HOME="${HOME}/.hermes"
+
+# Optional. Defaults to docker-compose.two-container.yml.
+COMPOSE_FILENAME="docker-compose.two-container.yml"

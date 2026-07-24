@@ -1,0 +1,116 @@
+# Two-container Docker Compose: Hermes Agent + Hermes WebUI
+
+services:
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-agent
+    command: gateway run
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "0.0.0.0:8642:8642"
+    volumes:
+      - /home/xmiaas/.hermes:/home/hermes/.hermes
+      - /home/xmiaas/workspace:/workspace
+      - hermes-agent-src:/opt/hermes
+      - hermes-agent-data:/opt/data
+    environment:
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_KEY="$(openssl rand -hex 32)"
+      - API_SERVER_CORS_ORIGINS='*'
+      - HERMES_HOME=/home/hermes/.hermes
+      - HERMES_UID=${UID:-1000}
+      - HERMES_GID=${GID:-1000}
+      - HERMES_TOOL_FORMAT=xml
+      - GATEWAY_HEALTH_URL=http://hermes-agent:8642
+    restart: unless-stopped
+    networks:
+      - hermes-net
+
+  hermes-dashboard:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-dashboard
+    command: dashboard --host 0.0.0.0 --no-open
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "0.0.0.0:9119:9119"
+    volumes:
+      - /home/xmiaas/.hermes:/home/hermes/.hermes
+      - /home/xmiaas/workspace:/workspace
+      - hermes-agent-src:/opt/hermes
+      - hermes-agent-data:/opt/data
+    environment:
+      - HERMES_HOME=/home/hermes/.hermes
+      - HERMES_UID=${UID:-1000}
+      - HERMES_GID=${GID:-1000}
+      - GATEWAY_HEALTH_URL=http://hermes-agent:8642
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${HERMES_DASHBOARD_BASIC_AUTH_SECRET}
+    depends_on:
+      - hermes-agent
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+    networks:
+      - hermes-net
+
+  hermes-webui:
+    image: ghcr.io/nesquena/hermes-webui:latest
+    container_name: hermes-webui
+    depends_on:
+      - hermes-agent
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "0.0.0.0:8787:8787"
+    volumes:
+      - /home/xmiaas/.hermes:/home/hermeswebui/.hermes
+      - /home/xmiaas/workspace:/workspace
+      - hermes-agent-src:/home/hermeswebui/.hermes/hermes-agent:ro
+      - hermes-agent-data:/home/hermeswebui/.hermes/data
+    environment:
+      - HERMES_HOME=/home/hermeswebui/.hermes
+      - HERMES_WEBUI_HOST=0.0.0.0
+      - HERMES_WEBUI_PORT=8787
+      - HERMES_WEBUI_PASSWORD=${HERMES_WEBUI_PASSWORD:-password}
+      - HERMES_WEBUI_STATE_DIR=/home/hermeswebui/.hermes/webui
+      - WANTED_UID=${UID:-1000}
+      - WANTED_GID=${GID:-1000}
+      - GATEWAY_HEALTH_URL=http://hermes-agent:8642
+    restart: unless-stopped
+    networks:
+      - hermes-net
+
+networks:
+  hermes-net:
+    driver: bridge
+
+volumes:
+  # IMPORTANT — upgrading the agent image:
+  #   The `hermes-agent-src` volume is initialised from the agent image's
+  #   `/opt/hermes` on first `up`, and Docker reuses the volume verbatim on
+  #   later runs — even after `docker pull` of a newer agent image. After
+  #   upgrading the agent image, run:
+  #
+  #     docker compose down
+  #     docker volume rm <project>_hermes-agent-src
+  #     docker compose pull
+  #     docker compose up -d
+  #
+  #   The full procedure (and why) is documented in docs/docker.md.
+  hermes-agent-src:
+  hermes-agent-data:
